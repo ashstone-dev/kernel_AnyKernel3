@@ -32,17 +32,18 @@ set_perm_recursive 0 0 750 750 $RAMDISK/init* $RAMDISK/sbin;
 } # end attributes
 
 # boot shell variables
-BLOCK=/dev/block/platform/13520000.ufs/by-name/boot;
-IS_SLOT_DEVICE=0;
-RAMDISK_COMPRESSION=auto;
-PATCH_VBMETA_FLAG=auto;
+block=/dev/block/platform/13520000.ufs/by-name/boot;
+dtboblock=/dev/block/platform/13520000.ufs/by-name/dtbo;
+is_slot_device=0;
+ramdisk_compression=auto;
+patch_vbmeta_flag=auto;
 
 # import functions/variables and setup patching - see for reference (DO NOT REMOVE)
 . tools/ak3-core.sh;
 
 # boot install
-split_boot;
+dump_boot;
 ui_print "- Installing SN Kernel";
-flash_boot;
+write_boot;
 ## end boot install
 ui_print "Installation Done"
