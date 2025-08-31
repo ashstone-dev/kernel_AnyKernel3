@@ -436,7 +436,7 @@ flash_boot() {
   if [ ! -f boot-new.img ]; then
     abort "No repacked image found to flash. Aborting...";
   elif [ "$(wc -c < boot-new.img)" -gt "$(wc -c < boot.img)" ]; then
-    abort "New image larger than target partition. Aborting...";
+    abort "New image larger than boot partition. Aborting...";
   fi;
   blockdev --setrw $BLOCK 2>/dev/null;
   if [ -f "$BIN/flash_erase" -a -f "$BIN/nandwrite" ]; then
@@ -453,124 +453,45 @@ flash_boot() {
   fi;
 }
 
-# flash_generic <name>
-flash_generic() {
-  local avb avbblock avbpath file flags img imgblock imgsz isro isunmounted path;
+# flash_dtbo (flash dtbo only)
+flash_dtbo() {
+  local i dtbo dtboblock;
 
-  cd $AKHOME;
-  for file in $1 $1.img; do
-    if [ -f $file ]; then
-      img=$file;
+  cd $home;
+  for i in dtbo dtbo.img; do
+    if [ -f $i ]; then
+      dtbo=$i;
       break;
     fi;
   done;
 
-  if [ "$img" -a ! -f ${1}_flashed ]; then
-    for path in /dev/block/mapper /dev/block/by-name /dev/block/bootdevice/by-name; do
-      for file in $1 $1$SLOT; do
-        if [ -e $path/$file ]; then
-          imgblock=$path/$file;
-          break 2;
-        fi;
-      done;
-    done;
-    if [ ! "$imgblock" ]; then
-      abort "$1 partition could not be found. Aborting...";
+  if [ "$dtbo" -a ! -f dtbo_flashed ]; then
+    dtboblock=/dev/block/bootdevice/by-name/dtbo$slot;
+    if [ ! -e "$dtboblock" ]; then
+      abort "dtbo partition could not be found. Aborting...";
     fi;
-    if [ ! "$NO_BLOCK_DISPLAY" ]; then
-      ui_print " " "$imgblock";
-    fi;
-    if [ "$path" == "/dev/block/mapper" ]; then
-      avb=$(httools_static avb $1);
-      [ $? == 0 ] || abort "Failed to parse fstab entry for $1. Aborting...";
-      if [ "$avb" ]; then
-        flags=$(httools_static disable-flags);
-        [ $? == 0 ] || abort "Failed to parse top-level vbmeta. Aborting...";
-        if [ "$flags" == "enabled" ]; then
-          ui_print " " "dm-verity detected! Patching $avb...";
-          for avbpath in /dev/block/mapper /dev/block/by-name /dev/block/bootdevice/by-name; do
-            for file in $avb $avb$SLOT; do
-              if [ -e $avbpath/$file ]; then
-                avbblock=$avbpath/$file;
-                break 2;
-              fi;
-            done;
-          done;
-          cd $BIN;
-          httools_static patch $1 $AKHOME/$img $avbblock || abort "Failed to patch $1 on $avb. Aborting...";
-          cd $AKHOME;
-        fi
-      fi
-      imgsz=$(wc -c < $img);
-      if [ "$imgsz" != "$(wc -c < $imgblock)" ]; then
-        if [ -d /postinstall/tmp -a "$SLOT_SELECT" == "inactive" ]; then
-          echo "Resizing $1$SLOT snapshot..." >&2;
-          snapshotupdater_static update $1 $imgsz || abort "Resizing $1$SLOT snapshot failed. Aborting...";
-        else
-          echo "Removing any existing $1_ak3..." >&2;
-          lptools_static remove $1_ak3;
-          echo "Clearing any merged cow partitions..." >&2;
-          lptools_static clear-cow;
-          echo "Attempting to create $1_ak3..." >&2;
-          if lptools_static create $1_ak3 $imgsz; then
-            echo "Replacing $1$SLOT with $1_ak3..." >&2;
-            lptools_static unmap $1_ak3 || abort "Unmapping $1_ak3 failed. Aborting...";
-            lptools_static map $1_ak3 || abort "Mapping $1_ak3 failed. Aborting...";
-            lptools_static replace $1_ak3 $1$SLOT || abort "Replacing $1$SLOT failed. Aborting...";
-            imgblock=/dev/block/mapper/$1_ak3;
-            ui_print " " "Warning: $1$SLOT replaced in super. Reboot before further logical partition operations.";
-          else
-            echo "Creating $1_ak3 failed. Attempting to resize $1$SLOT..." >&2;
-            httools_static umount $1 || abort "Unmounting $1 failed. Aborting...";
-            if [ -e $path/$1-verity ]; then
-              lptools_static unmap $1-verity || abort "Unmapping $1-verity failed. Aborting...";
-            fi
-            lptools_static unmap $1$SLOT || abort "Unmapping $1$SLOT failed. Aborting...";
-            lptools_static resize $1$SLOT $imgsz || abort "Resizing $1$SLOT failed. Aborting...";
-            lptools_static map $1$SLOT || abort "Mapping $1$SLOT failed. Aborting...";
-            isunmounted=1;
-          fi
-        fi
-      fi
-    elif [ "$(wc -c < $img)" -gt "$(wc -c < $imgblock)" ]; then
-      abort "New $1 image larger than $1 partition. Aborting...";
-    fi;
-    isro=$(blockdev --getro $imgblock 2>/dev/null);
-    blockdev --setrw $imgblock 2>/dev/null;
-    if [ -f "$BIN/flash_erase" -a -f "$BIN/nandwrite" ]; then
-      flash_erase $imgblock 0 0;
-      nandwrite -p $imgblock $img;
-    elif [ "$CUSTOMDD" ]; then
-      dd if=/dev/zero of=$imgblock 2>/dev/null;
-      dd if=$img of=$imgblock;
+    blockdev --setrw $dtboblock 2>/dev/null;
+    if [ -f "$bin/flash_erase" -a -f "$bin/nandwrite" ]; then
+      $bin/flash_erase $dtboblock 0 0;
+      $bin/nandwrite -p $dtboblock $dtbo;
+    elif [ "$customdd" ]; then
+      dd if=/dev/zero of=$dtboblock 2>/dev/null;
+      dd if=$dtbo of=$dtboblock;
     else
-      cat $img /dev/zero > $imgblock 2>/dev/null || true;
+      cat $dtbo /dev/zero > $dtboblock 2>/dev/null || true;
     fi;
     if [ $? != 0 ]; then
-      abort "Flashing $1 failed. Aborting...";
+      abort "Flashing dtbo failed. Aborting...";
     fi;
-    if [ "$isro" != 0 ]; then
-      blockdev --setro $imgblock 2>/dev/null;
-    fi;
-    if [ "$isunmounted" -a "$path" == "/dev/block/mapper" ]; then
-      httools_static mount $1 || abort "Mounting $1 failed. Aborting...";
-    fi
-    touch ${1}_flashed;
+    touch dtbo_flashed;
   fi;
 }
 
-# flash_dtbo (backwards compatibility for flash_generic)
-flash_dtbo() { flash_generic dtbo; }
-
-### write_boot (repack ramdisk then build, sign and write image, vendor_dlkm and dtbo)
+### write_boot (repack ramdisk then build, sign and write image and dtbo)
 write_boot() {
   repack_ramdisk;
   flash_boot;
-  flash_generic vendor_boot; # temporary until hdr v4 can be unpacked/repacked fully by magiskboot
-  flash_generic vendor_kernel_boot; # temporary until hdr v4 can be unpacked/repacked fully by magiskboot
-  flash_generic vendor_dlkm;
-  flash_generic system_dlkm;
-  flash_generic dtbo;
+  flash_dtbo
 }
 ###
 
