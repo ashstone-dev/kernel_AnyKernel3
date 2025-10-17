@@ -4,7 +4,7 @@
 ### AnyKernel setup
 # global properties
 properties() { '
-kernel.string=Something New Kernel
+kernel.string=AOSP kernel with KSU Next + SuSFS
 do.devicecheck=1
 do.modules=0
 do.systemless=1
@@ -43,7 +43,7 @@ patch_vbmeta_flag=auto;
 
 # boot install
 dump_boot;
-ui_print "- Installing SN Kernel";
+ui_print "- Installing kernel";
 write_boot;
 ## end boot install
 ui_print "Installation Done"
